@@ -1,0 +1,47 @@
+---
+title: "A2"
+author: "Yunming Xu"
+date: "12/13/2020"
+output: pdf_document
+---
+
+```{r}
+LibraryList <- c("ggplot2","reshape2","aod","data.table","xpose4","xtable", "pander","geepack","gee","dplyr","lme4","KMsurv","survival","ggfortify","gridExtra")
+templist <- suppressMessages(lapply(LibraryList, require, character.only=T))
+rm(LibraryList,templist)
+
+my_theme<-function()
+  {
+  theme(panel.background = element_rect(fill='white', colour='red'))+
+  theme(axis.title.y = element_text(colour = 'black', size = 20))+
+  theme(axis.text.y = element_text(size = 18,colour = 'black'))+
+  theme(axis.title.x = element_text(colour = 'black', size = 20))+
+  theme(axis.text.x = element_text(size = 18,colour = 'black'))+
+  theme(plot.title = element_text(lineheight=.8, face="bold"))+
+  theme(legend.position="top")+
+  theme(legend.title=element_blank())+
+  theme(legend.text = element_text(colour="blue", size = 18, face = "bold"))
+}
+```
+```{r}
+#### Create a loop to store to hazard ratio values--------
+nrep<-100
+### Create a vector to store the hazard ratios from each replicate-----
+hr<-numeric()
+p.val<-numeric()
+
+for(i in 1: nrep)
+{
+n<-800
+mean.baseline <- 8.5
+baseline <-rnorm(n, mean.baseline, sd= sqrt(0.4*mean.baseline))
+is.TRT<- rbinom(n, 1, 0.5)
+TRT <- factor(is.TRT, levels = c(0,1), labels = c("Placebo","Drug"))
+mean.pr.TRT <- mean.baseline*0.5
+pr.TRT <- rnorm(n, mean.pr.TRT, sd= sqrt(0.4*mean.pr.TRT))
+mean.pr.nTRT <- mean.baseline*0.8
+pr.nTRT <- rnorm(n, mean.pr.nTRT, sd= sqrt(0.4*mean.pr.nTRT))
+
+df <- data.frame(ID = 1:n, is.TRT = is.TRT, TRT = TRT, baseline = baseline, pr8w = ifelse(is.TRT == 0, pr.nTRT, pr.TRT))
+}
+```
