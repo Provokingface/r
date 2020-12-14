@@ -10,7 +10,7 @@ LibraryList <- c("ggplot2","reshape2","aod","data.table","xpose4","xtable", "pan
 templist <- suppressMessages(lapply(LibraryList, require, character.only=T))
 rm(LibraryList,templist)
 
-####my_theme<-function()
+my_theme<-function()
   {
   theme(panel.background = element_rect(fill='white', colour='red'))+
   theme(axis.title.y = element_text(colour = 'black', size = 20))+
@@ -50,10 +50,11 @@ cens<-runif(n,0,1)
 df$STATUS<-ifelse(cens<0.3,0,1)
 myfit<-coxph(Surv(TIME, STATUS) ~ is.TRT, 
                    data = df,method="breslow")
+summary(myfit)
 hr[i]<-exp(myfit$coef)
 test.grp<-survdiff(Surv(TIME, STATUS)~is.TRT,data = df)
 p.val[i] = 1 - pchisq(test.grp$chisq, length(test.grp$n) - 1)
 }
-
 df2 = data.frame(rep = 1:nrep, hr = hr, pval = p.val, pass = ifelse(hr>3.84, 1, 0))
 ```
+
