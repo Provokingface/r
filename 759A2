@@ -10,7 +10,7 @@ LibraryList <- c("ggplot2","reshape2","aod","data.table","xpose4","xtable", "pan
 templist <- suppressMessages(lapply(LibraryList, require, character.only=T))
 rm(LibraryList,templist)
 
-my_theme<-function()
+####my_theme<-function()
   {
   theme(panel.background = element_rect(fill='white', colour='red'))+
   theme(axis.title.y = element_text(colour = 'black', size = 20))+
@@ -25,7 +25,7 @@ my_theme<-function()
 ```
 ```{r}
 #### Create a loop to store to hazard ratio values--------
-nrep<-100
+nrep <- 100
 ### Create a vector to store the hazard ratios from each replicate-----
 hr<-numeric()
 p.val<-numeric()
@@ -41,7 +41,19 @@ mean.pr.TRT <- mean.baseline*0.5
 pr.TRT <- rnorm(n, mean.pr.TRT, sd= sqrt(0.4*mean.pr.TRT))
 mean.pr.nTRT <- mean.baseline*0.8
 pr.nTRT <- rnorm(n, mean.pr.nTRT, sd= sqrt(0.4*mean.pr.nTRT))
+ECOG <- rbinom(n, 1, 0.7)
+df <- data.frame(ID = 1:n, is.TRT = is.TRT, TRT = TRT, baseline = baseline, pr8w = ifelse(is.TRT == 0, pr.nTRT, pr.TRT), ECOG = ECOG)
 
-df <- data.frame(ID = 1:n, is.TRT = is.TRT, TRT = TRT, baseline = baseline, pr8w = ifelse(is.TRT == 0, pr.nTRT, pr.TRT))
+eps<-rnorm(n,0,sqrt(0.0025))
+df$TIME= exp(5.75 - 0.21*df$ECOG - 0.029*(df$baseline-8.5) + 1.07*(df$pr8w - df$baseline)/df$baseline + eps)
+cens<-runif(n,0,1)
+df$STATUS<-ifelse(cens<0.3,0,1)
+myfit<-coxph(Surv(TIME, STATUS) ~ is.TRT, 
+                   data = df,method="breslow")
+hr[i]<-exp(myfit$coef)
+test.grp<-survdiff(Surv(TIME, STATUS)~is.TRT,data = df)
+p.val[i] = 1 - pchisq(test.grp$chisq, length(test.grp$n) - 1)
 }
+
+df2 = data.frame(rep = 1:nrep, hr = hr, pval = p.val, pass = ifelse(hr>3.84, 1, 0))
 ```
