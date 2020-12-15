@@ -29,32 +29,34 @@ nrep <- 100
 ### Create a vector to store the hazard ratios from each replicate-----
 hr<-numeric()
 p.val<-numeric()
+chisq<-numeric()
 
 for(i in 1: nrep)
 {
-n<-800
+n<-70
 mean.baseline <- 8.5
-baseline <-rnorm(n, mean.baseline, sd= sqrt(0.4*mean.baseline))
+baseline <-rnorm(n, mean.baseline, sd = sqrt(0.4*mean.baseline))
 is.TRT<- rbinom(n, 1, 0.5)
 TRT <- factor(is.TRT, levels = c(0,1), labels = c("Placebo","Drug"))
+PTR8w.TRT <- rnorm(n, 0.5, sd = sqrt(0.4*0.5))
+PTR8w.nTRT <- rnorm(n, 0.2, sd = sqrt(0.4*0.2))
 mean.pr.TRT <- mean.baseline*0.5
 pr.TRT <- rnorm(n, mean.pr.TRT, sd= sqrt(0.4*mean.pr.TRT))
 mean.pr.nTRT <- mean.baseline*0.8
 pr.nTRT <- rnorm(n, mean.pr.nTRT, sd= sqrt(0.4*mean.pr.nTRT))
 ECOG <- rbinom(n, 1, 0.7)
 df <- data.frame(ID = 1:n, is.TRT = is.TRT, TRT = TRT, baseline = baseline, pr8w = ifelse(is.TRT == 0, pr.nTRT, pr.TRT), ECOG = ECOG)
-
 eps<-rnorm(n,0,sqrt(0.0025))
 df$TIME= exp(5.75 - 0.21*df$ECOG - 0.029*(df$baseline-8.5) + 1.07*(df$pr8w - df$baseline)/df$baseline + eps)
 cens<-runif(n,0,1)
 df$STATUS<-ifelse(cens<0.3,0,1)
-myfit<-coxph(Surv(TIME, STATUS) ~ is.TRT, 
-                   data = df,method="breslow")
-summary(myfit)
+myfit<-coxph(Surv(TIME, STATUS) ~ TRT, data = df,method="breslow")
 hr[i]<-exp(myfit$coef)
-test.grp<-survdiff(Surv(TIME, STATUS)~is.TRT,data = df)
+test.grp<-survdiff(Surv(TIME, STATUS) ~ TRT,data = df)
 p.val[i] = 1 - pchisq(test.grp$chisq, length(test.grp$n) - 1)
+chisq[i] = test.grp$chisq
 }
-df2 = data.frame(rep = 1:nrep, hr = hr, pval = p.val, pass = ifelse(hr>3.84, 1, 0))
+df2 = data.frame(rep = 1:nrep, hr = hr, pval = p.val, chisq = chisq, pass = ifelse(chisq>3.84, 1, 0))
+power <- mean(df2$pass)
+power
 ```
-
