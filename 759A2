@@ -6,9 +6,19 @@ output: pdf_document
 ---
 
 ```{r}
-LibraryList <- c("ggplot2","reshape2","aod","data.table","xpose4","xtable", "pander","geepack","gee","dplyr","lme4","KMsurv","survival","ggfortify","gridExtra")
-templist <- suppressMessages(lapply(LibraryList, require, character.only=T))
-rm(LibraryList,templist)
+library(tidyverse)
+library("knitr")
+library("broom")
+library(GGally)
+library(gridExtra)
+library(epitools)
+library(PKPDmisc)
+library(kableExtra)
+library(flextable)
+library(survival)
+library("table1")
+library(survminer)
+library(purrr)
 
 my_theme<-function()
   {
@@ -23,40 +33,185 @@ my_theme<-function()
   theme(legend.text = element_text(colour="blue", size = 18, face = "bold"))
 }
 ```
+
 ```{r}
-#### Create a loop to store to hazard ratio values--------
-nrep <- 100
-### Create a vector to store the hazard ratios from each replicate-----
+sim1 <- 1:100 %>% 
+  map_df(function(.rep){
+n <- 200
+mean.baseline <- 8.5
+log.baseline <- log(8.5)
+cv.tumor <- 0.4
+sd.tumor <- sqrt(log(0.4^2+1))
+logbaseline <- rnorm(n, mean = log.baseline, sd = sd.tumor)
+baseline <- exp(logbaseline)
+
+is.TRT<- rbinom(n, 1, 0.5)
+
+logPTR8w.TRT <- rnorm(n, mean = log(0.5), sd = sd.tumor)
+PTR8W.TRT <- exp(logPTR8w.TRT)
+
+logPTR8w.nTRT <- rnorm(n, mean = log(0.2), sd = sd.tumor)
+PTR8W.nTRT <- exp(logPTR8w.nTRT)
+
+ECOG<-rbinom(n, 1, 0.7)
+
+df <- data.frame(ID = 1:n, is.TRT = is.TRT, baseline = baseline, PTR8W.nTRT = PTR8W.nTRT, PTR8W.TRT = PTR8W.TRT, ECOG = ECOG) 
+df$PTR8W.nTRT[df$PTR8W.nTRT>1]=1
+df$PTR8W.TRT[df$PTR8W.TRT>1]=1
+df <- df %>% mutate(WEEK8 = ifelse(is.TRT == 0, PTR8W.nTRT, PTR8W.TRT)) %>% select(-PTR8W.nTRT, -PTR8W.TRT)
+
+eps<-rnorm(n,0,sqrt(0.71))
+
+df$TIME= exp(5.75 - 0.21*df$ECOG - 0.029*(df$baseline-8.5) + 1.07*df$WEEK8 + eps)
+
+cens<-runif(n,0,1)
+df$STATUS<-ifelse(cens<0.3,0,1)
+df <- df %>% mutate(rep=.rep)
+})
+```
+
+```{r}
+sim1%>%
+  filter(rep == 99) %>%
+  ggplot(aes(x=WEEK8))+
+  geom_histogram(fill = "lightblue",color = "black")+
+  my_theme()+
+  xlab("Change From Baseline (%)")
+```
+
+```{r}
+sim1 %>%
+  filter(rep == 88) %>%
+  ggplot(aes(TIME, fill = as.factor(is.TRT)))+
+  geom_histogram(color = "black")+
+  my_theme()+
+  theme(legend.position = "top")+
+  xlab("Survival times")
+
+sim1 %>%
+  filter(rep == 88) %>%
+  group_by(STATUS) %>%
+ tally()
+```
+
+```{r}
+km.fit<-survfit(Surv(TIME, STATUS)~is.TRT, sim1 %>%
+  filter(rep == 88))
+km.fit
+summary(km.fit)
+```
+
+```{r}
+surv_diff <- survdiff(Surv(TIME, STATUS)~is.TRT, sim1 %>%
+  filter(rep == 88))
+surv_diff
+```
+```{r}
+ggsurvplot(km.fit, ggtheme = my_theme(),xlab = "Time (days)")
+
+p <- ggsurvplot(km.fit, conf.int = TRUE, legend.labs=c("Placebo", "CTMTaxel"),
+           ggtheme = theme_minimal(), xlim = c(0,1500), xlab = "Time (days)", 
+    ylab = "Probability of Survival")
+
+ggpar(p, 
+      font.main = c(14, "bold"),
+      font.x = c(14, "bold"),
+      font.y = c(14, "bold"),
+      font.title = c(18, "bold"),
+      font.caption = c(12, "bold"), 
+      font.legend = c(12, "bold"), 
+      font.tickslab = c(12, "bold"))
+
+```
+
+
+
+```{r}
+sim1%>%
+  ggplot(aes(x=WEEK8))+
+  geom_histogram(fill = "lightblue",color = "black")+
+  my_theme()+
+  xlab("Change From Baseline (%)")
+
+sim1 %>%
+  ggplot(aes(TIME, fill = as.factor(is.TRT)))+
+  geom_histogram(color = "black")+
+  my_theme()+
+  theme(legend.position = "top")+
+  xlab("Survival times")
+
+km.fit<-survfit(Surv(TIME, STATUS)~is.TRT, sim1)
+km.fit
+summary(km.fit)
+
+surv_diff_all <- survdiff(Surv(TIME, STATUS)~is.TRT, sim1)
+surv_diff_all
+
+ggsurvplot(km.fit, ggtheme = my_theme(),xlab = "Time (days)")
+
+p_all <- ggsurvplot(km.fit, conf.int = TRUE, legend.labs=c("Placebo", "CTMTaxel"),
+           ggtheme = theme_minimal(), xlim = c(0,1500), xlab = "Time (days)", 
+    ylab = "Probability of Survival")
+
+ggpar(p_all, 
+      font.main = c(14, "bold"),
+      font.x = c(14, "bold"),
+      font.y = c(14, "bold"),
+      font.title = c(18, "bold"),
+      font.caption = c(12, "bold"), 
+      font.legend = c(12, "bold"), 
+      font.tickslab = c(12, "bold"))
+```
+
+```{r}
 hr<-numeric()
 p.val<-numeric()
 chisq<-numeric()
+power<-numeric()
 
+ss <- 1000
+for(j in 100: ss)
+{
+nrep<-100
 for(i in 1: nrep)
 {
-n<-70
+n<- j
 mean.baseline <- 8.5
-baseline <-rnorm(n, mean.baseline, sd = sqrt(0.4*mean.baseline))
+log.baseline <- log(8.5)
+cv.tumor <- 0.4
+sd.tumor <- sqrt(log(0.4^2+1))
+logbaseline <- rnorm(n, mean = log.baseline, sd = sd.tumor)
+baseline <- exp(logbaseline)
+
 is.TRT<- rbinom(n, 1, 0.5)
-TRT <- factor(is.TRT, levels = c(0,1), labels = c("Placebo","Drug"))
-PTR8w.TRT <- rnorm(n, 0.5, sd = sqrt(0.4*0.5))
-PTR8w.nTRT <- rnorm(n, 0.2, sd = sqrt(0.4*0.2))
-mean.pr.TRT <- mean.baseline*0.5
-pr.TRT <- rnorm(n, mean.pr.TRT, sd= sqrt(0.4*mean.pr.TRT))
-mean.pr.nTRT <- mean.baseline*0.8
-pr.nTRT <- rnorm(n, mean.pr.nTRT, sd= sqrt(0.4*mean.pr.nTRT))
-ECOG <- rbinom(n, 1, 0.7)
-df <- data.frame(ID = 1:n, is.TRT = is.TRT, TRT = TRT, baseline = baseline, pr8w = ifelse(is.TRT == 0, pr.nTRT, pr.TRT), ECOG = ECOG)
-eps<-rnorm(n,0,sqrt(0.0025))
-df$TIME= exp(5.75 - 0.21*df$ECOG - 0.029*(df$baseline-8.5) + 1.07*(df$pr8w - df$baseline)/df$baseline + eps)
+
+logPTR8w.TRT <- rnorm(n, mean = log(0.5), sd = sd.tumor)
+PTR8W.TRT <- exp(logPTR8w.TRT)
+
+logPTR8w.nTRT <- rnorm(n, mean = log(0.2), sd = sd.tumor)
+PTR8W.nTRT <- exp(logPTR8w.nTRT)
+
+ECOG<-rbinom(n, 1, 0.7)
+
+df <- data.frame(ID = 1:n, is.TRT = is.TRT, baseline = baseline, PTR8W.nTRT = PTR8W.nTRT, PTR8W.TRT = PTR8W.TRT, ECOG = ECOG) 
+df$PTR8W.nTRT[df$PTR8W.nTRT>1]=1
+df$PTR8W.TRT[df$PTR8W.TRT>1]=1
+df <- df %>% mutate(WEEK8 = ifelse(is.TRT == 0, PTR8W.nTRT, PTR8W.TRT)) %>% select(-PTR8W.nTRT, -PTR8W.TRT)
+
+eps<-rnorm(n,0,sqrt(0.71))
+
+df$TIME= exp(5.75 - 0.21*df$ECOG - 0.029*(df$baseline-8.5) + 1.07*df$WEEK8 + eps)
+
 cens<-runif(n,0,1)
 df$STATUS<-ifelse(cens<0.3,0,1)
-myfit<-coxph(Surv(TIME, STATUS) ~ TRT, data = df,method="breslow")
+myfit<-coxph(Surv(TIME, STATUS) ~ is.TRT, data = df,method="breslow")
 hr[i]<-exp(myfit$coef)
-test.grp<-survdiff(Surv(TIME, STATUS) ~ TRT,data = df)
+test.grp<-survdiff(Surv(TIME, STATUS) ~ is.TRT,data = df)
 p.val[i] = 1 - pchisq(test.grp$chisq, length(test.grp$n) - 1)
 chisq[i] = test.grp$chisq
 }
 df2 = data.frame(rep = 1:nrep, hr = hr, pval = p.val, chisq = chisq, pass = ifelse(chisq>3.84, 1, 0))
-power <- mean(df2$pass)
-power
+power[j] = mean(df2$pass)
+}
+df3 = data.frame(Samplesize = 100:ss, Power = power)
 ```
