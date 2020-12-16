@@ -169,13 +169,13 @@ p.val<-numeric()
 chisq<-numeric()
 power<-numeric()
 
-ss <- 1000
-for(j in 100: ss)
+ss <- 40
+for(j in 1: ss)
 {
+n<- j*20
 nrep<-100
 for(i in 1: nrep)
 {
-n<- j
 mean.baseline <- 8.5
 log.baseline <- log(8.5)
 cv.tumor <- 0.4
@@ -213,5 +213,15 @@ chisq[i] = test.grp$chisq
 df2 = data.frame(rep = 1:nrep, hr = hr, pval = p.val, chisq = chisq, pass = ifelse(chisq>3.84, 1, 0))
 power[j] = mean(df2$pass)
 }
-df3 = data.frame(Samplesize = 100:ss, Power = power)
+```
+
+```{r}
+df3 = data.frame(Samplesize = seq(20,800,by=20), Power = power)
+ggplot(df3,aes(x = Samplesize, y = power))+
+  geom_line(size = 0.5)+
+  my_theme()+
+  xlab("Sample size per group")+
+  ylab("Power")+
+  theme(legend.position = "top")+
+  geom_hline(aes(yintercept = 0.8), linetype = "dashed", size = 0.5)
 ```
